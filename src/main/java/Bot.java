@@ -1,3 +1,4 @@
+import functions.FilterOperation;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -7,68 +8,70 @@ import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.PhotoSize;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import utils.ImageUtils;
+import utils.PhotoMessageUtils;
+import utils.RgbMaster;
 
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Bot extends TelegramLongPollingBot {
-
+    // Название бота
     @Override
     public String getBotUsername() {
         return "vladsecond_bot";
     }
 
+    // токен бота
     @Override
     public String getBotToken() {
 
-        return "/";
+        return "-";
     }
 
     @Override
     public void onUpdateReceived(Update update) {
+        // получение и сохранение изображение пользователя
         Message message = update.getMessage();
-        String response = message.getDate().toString();
-        PhotoSize photoSize = message.getPhoto().get(0);
-        final String fileId = photoSize.getFileId();
+        String chatID = message.getChatId().toString();
         try {
-            final org.telegram.telegrambots.meta.api.objects.File file = sendApiMethod(new GetFile(fileId));
-            final String imageUrl = "https://api.telegram.org/file/bot" + getBotToken() + "/" + file.getFilePath();
-            saveImage(imageUrl, "received_image.jpeg");
-        } catch (TelegramApiException | IOException e) {
-            e.printStackTrace();
+            ArrayList<String> photoPaths = new ArrayList<>(PhotoMessageUtils.savePhotos(getFilesByMessage(message), getBotToken()));
+                for (String path: photoPaths) {
+                    PhotoMessageUtils.processingImage(path);
+                    execute(preparePhotoMessage(path,chatID));
+                }
+        }catch (Exception e){
+                e.printStackTrace();
+            }
+
+    }
+
+    private List<org.telegram.telegrambots.meta.api.objects.File> getFilesByMessage(Message message) {
+        List<PhotoSize> photoSizes = message.getPhoto();
+        ArrayList<org.telegram.telegrambots.meta.api.objects.File> files = new ArrayList<>();
+        for (PhotoSize photoSize : photoSizes
+        ) {
+            final String fileId = photoSize.getFileId();
+            try {
+               files.add(sendApiMethod(new GetFile(fileId)));
+
+            } catch (TelegramApiException  e) {
+                e.printStackTrace();
+            }
         }
-
-
-        //
-        System.out.println(message.getText());
+        return  files;
+    }
+    /// подготовка отправки изображение обратно
+    private SendPhoto preparePhotoMessage(String localPath, String chatID){
         SendPhoto sendPhoto = new SendPhoto();
-        sendPhoto.setChatId(message.getChatId());
+        sendPhoto.setChatId(chatID);
         InputFile newFile = new InputFile();
-        newFile.setMedia(new File("ты крыса.png"));
+        newFile.setMedia(new File(localPath));
         sendPhoto.setPhoto(newFile);
-        sendPhoto.setCaption("да ");
-
-        SendMessage sendMessage = new SendMessage();
-        sendMessage.setChatId(message.getChatId());
-        sendMessage.setText("Your message: " + response);
-        try {
-            execute(sendMessage);
-            execute(sendPhoto);
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-        }
+        return sendPhoto;
     }
 
-    public void saveImage(String url, String fileName) throws IOException {
-        URL urlModel = new URL(url);
-        InputStream inputStream = urlModel.openStream();
-        OutputStream outputStream = new FileOutputStream(fileName);
-        byte[] b = new byte[2048];
-        int length;
-        while ((length = inputStream.read(b)) != -1) {
-            outputStream.write(b, 0, length);
-        }
-        inputStream.close();
-        outputStream.close();
-    }
 }
